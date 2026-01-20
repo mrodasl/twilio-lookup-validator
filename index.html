@@ -326,17 +326,48 @@
         }
 
         // Función para mostrar ítem de resultado
-        function showResultItem(number, status, message) {
-            const resultsList = document.getElementById('resultsList');
-            const item = document.createElement('div');
-            item.className = `result-item ${status}`;
-            item.id = `result-${resultsList.children.length}`;
-            item.innerHTML = `
-                <div class="number">${number}</div>
-                <div class="status">${message}</div>
-            `;
-            resultsList.appendChild(item);
+        function updateResultItem(index, number, data) {
+    const item = document.getElementById(`result-${index}`);
+    
+    let statusClass = 'error';
+    let statusText = 'Error desconocido';
+    
+    if (data.success === false) {
+        // Error de la API
+        statusClass = 'error';
+        statusText = `⚠️ ERROR: ${data.error || 'Error en la validación'}`;
+        if (data.details) {
+            statusText += `<br><small>${data.details}</small>`;
         }
+    } else if (data.status === 'active') {
+        statusClass = 'active';
+        const carrierInfo = data.carrier && data.carrier !== 'Desconocido' 
+            ? ` | Operador: ${data.carrier}` 
+            : '';
+        const countryInfo = data.country && data.country !== 'N/A'
+            ? ` | País: ${data.country}`
+            : '';
+        statusText = `✅ ACTIVO ${carrierInfo}${countryInfo}`;
+    } else if (data.status === 'inactive') {
+        statusClass = 'inactive';
+        statusText = `❌ INACTIVO | El número no existe o está apagado`;
+    } else if (data.status === 'invalid') {
+        statusClass = 'error';
+        statusText = `❌ INVÁLIDO | Formato incorrecto o número no válido`;
+    } else if (data.status === 'unsupported') {
+        statusClass = 'error';
+        statusText = `⚠️ NO SOPORTADO | País no disponible para validación`;
+    } else {
+        statusClass = 'error';
+        statusText = `⚠️ ESTADO DESCONOCIDO | ${JSON.stringify(data)}`;
+    }
+    
+    item.className = `result-item ${statusClass}`;
+    item.innerHTML = `
+        <div class="number">${number}</div>
+        <div class="status">${statusText}</div>
+    `;
+}
 
         // Función para actualizar ítem de resultado
         function updateResultItem(index, number, data) {
