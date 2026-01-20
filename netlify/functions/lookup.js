@@ -57,36 +57,55 @@ exports.handler = async function(event, context) {
             };
         }
 
-        console.log(`🔍 Twilio Lookup request for: ${number}`);
+        console.log(`🔍 Twilio Lookup V2 request for: ${number}`);
 
         // Inicializar cliente Twilio
         const client = new Twilio(accountSid, authToken);
 
-        // Hacer Lookup con Twilio
-        // El parámetro 'type: 'carrier'' obtiene información del operador
-        // Esto hace un ping al operador para verificar si el número existe
+        // ¡CORRECCIÓN IMPORTANTE! - Formato correcto para Lookup V2
+        // Opción 1: Sin parámetros (solo validación básica)
         const lookupData = await client.lookups.v2.phoneNumbers(number)
-            .fetch({ fields: 'line_type_intelligence,carrier' });
-
-        console.log('📊 Twilio Lookup response:', {
-            number: lookupData.phoneNumber,
-            valid: lookupData.valid,
-            lineType: lookupData.lineTypeIntelligence?.type,
-            carrier: lookupData.carrier?.name,
-            country: lookupData.countryCode
-        });
-
-        // Determinar estado basado en la respuesta
-        let status = 'unknown';
+            .fetch();
         
-        if (!lookupData.valid) {
+        console.log('📊 Twilio Lookup V2 RAW response:', JSON.stringify(lookupData, null, 2));
+
+        // Analizar la respuesta
+        let status = 'unknown';
+        let carrier = 'Desconocido';
+        let country = 'N/A';
+        let lineType = 'unknown';
+        
+        // Verificar si es válido
+        if (lookupData.valid === false) {
             status = 'invalid';
-        } else if (lookupData.lineTypeIntelligence?.type === 'mobile' || 
-                   lookupData.lineTypeIntelligence?.type === 'landline') {
-            // Si Twilio devuelve un tipo de línea válido, el número existe
-            status = 'active';
-        } else if (lookupData.lineTypeIntelligence?.type === 'invalid') {
-            status = 'inactive';
+        } else {
+            // Intentar determinar si está activo
+            if (lookupData.lineTypeIntelligence) {
+                lineType = lookupData.lineTypeIntelligence.type || 'unknown';
+                
+                if (lineType === 'mobile' || lineType === 'landline') {
+                    status = 'active';
+                } else if (lineType === 'invalid') {
+                    status = 'inactive';
+                } else if (lineType === 'voip' || lineType === 'toll_free') {
+                    status = 'active'; // Considerar como activo
+                }
+            }
+            
+            // Obtener información del carrier
+            if (lookupData.carrier) {
+                carrier = lookupData.carrier.name || 'Desconocido';
+            }
+            
+            // Obtener país
+            if (lookupData.countryCode) {
+                country = lookupData.countryCode;
+            }
+            
+            // Si no se pudo determinar pero es válido, asumir activo
+            if (status === 'unknown' && lookupData.valid === true) {
+                status = 'active';
+            }
         }
 
         return {
@@ -97,30 +116,59 @@ exports.handler = async function(event, context) {
                 status: status,
                 number: lookupData.phoneNumber,
                 valid: lookupData.valid,
-                lineType: lookupData.lineTypeIntelligence?.type || 'unknown',
-                carrier: lookupData.carrier?.name || 'Desconocido',
-                country: lookupData.countryCode || 'N/A',
-                timestamp: new Date().toISOString()
+                lineType: lineType,
+                carrier: carrier,
+                country: country,
+                timestamp: new Date().toISOString(),
+                // Información adicional para debugging
+                rawData: {
+                    phoneNumber: lookupData.phoneNumber,
+                    nationalFormat: lookupData.nationalFormat,
+                    countryCode: lookupData.countryCode,
+                    valid: lookupData.valid,
+                    lineTypeIntelligence: lookupData.lineTypeIntelligence,
+                    carrier: lookupData.carrier
+                }
             })
         };
 
     } catch (error) {
-        console.error('❌ Error en Twilio Lookup:', error);
+        console.error('❌ Error en Twilio Lookup V2:', error);
+        
+        // Mostrar más detalles del error
+        console.error('Error details:', {
+            code: error.code,
+            status: error.status,
+            message: error.message,
+            moreInfo: error.moreInfo
+        });
 
         let errorMessage = 'Error en la validación';
         let status = 'error';
+        let details = error.message;
 
         // Manejar errores específicos de Twilio
         if (error.code === 20404) {
-            errorMessage = 'Número no encontrado o formato inválido';
+            errorMessage = 'Número no encontrado';
+            status = 'inactive';
+        } else if (error.code === 21211) {
+            errorMessage = 'Número inválido';
             status = 'invalid';
         } else if (error.code === 20003) {
             errorMessage = 'Error de autenticación con Twilio';
-        } else if (error.code === 21211) {
-            errorMessage = 'Número telefónico inválido';
+        } else if (error.code === 21450) {
+            errorMessage = 'Lookup no disponible para este país';
+            status = 'unsupported';
+        } else if (error.code === 21612) {
+            errorMessage = 'No se puede validar este tipo de número';
             status = 'invalid';
+        } else if (error.status === 400) {
+            errorMessage = 'Parámetros inválidos en la solicitud';
+            details = `Error 400: ${error.message}`;
+        } else if (error.status === 401) {
+            errorMessage = 'No autorizado - verifica tus credenciales';
         } else if (error.status === 404) {
-            errorMessage = 'Número no existe';
+            errorMessage = 'Recurso no encontrado';
             status = 'inactive';
         }
 
@@ -131,8 +179,10 @@ exports.handler = async function(event, context) {
                 success: false,
                 status: status,
                 error: errorMessage,
-                twilioError: error.code,
-                message: error.message
+                details: details,
+                code: error.code,
+                moreInfo: error.moreInfo,
+                timestamp: new Date().toISOString()
             })
         };
     }
