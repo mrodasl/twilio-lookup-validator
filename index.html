@@ -3,228 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Validador de Números - Twilio Lookup</title>
+    <title>Debug - Validador Twilio Lookup</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: Arial, sans-serif;
-        }
-        
-        body {
-            background: #f5f5f5;
-            padding: 20px;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        
-        .container {
-            background: white;
-            border-radius: 8px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
-            text-align: center;
-            font-size: 24px;
-        }
-        
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            text-align: center;
-            font-size: 14px;
-        }
-        
-        .input-section {
-            margin-bottom: 30px;
-        }
-        
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: bold;
-        }
-        
-        textarea {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-            resize: vertical;
-            min-height: 100px;
-        }
-        
-        .count {
-            text-align: right;
-            color: #666;
-            font-size: 12px;
-            margin-top: 5px;
-        }
-        
-        button {
-            background: #F22F46;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            width: 100%;
-            font-weight: bold;
-        }
-        
-        button:hover {
-            background: #d41e33;
-        }
-        
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-        
-        .results {
-            margin-top: 30px;
-        }
-        
-        .result-item {
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 4px;
-            border-left: 4px solid #ccc;
-        }
-        
-        .result-item.active {
-            background: #e8f5e9;
-            border-left-color: #4CAF50;
-        }
-        
-        .result-item.inactive {
-            background: #ffebee;
-            border-left-color: #f44336;
-        }
-        
-        .result-item.error {
-            background: #fff3e0;
-            border-left-color: #ff9800;
-        }
-        
-        .number {
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .status {
-            font-size: 14px;
-        }
-        
-        .loading {
-            text-align: center;
-            color: #666;
-            padding: 20px;
-        }
-        
-        .summary {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 20px;
-            font-size: 14px;
-        }
-        
-        .summary span {
-            margin-right: 15px;
-        }
-        
-        .note {
-            background: #e3f2fd;
-            padding: 15px;
-            border-radius: 4px;
-            margin-top: 20px;
-            font-size: 12px;
-            color: #1976d2;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { background: #f5f5f5; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin-bottom: 20px; text-align: center; }
+        .debug-info { background: #f0f0f0; padding: 15px; border-radius: 4px; margin: 20px 0; font-family: monospace; font-size: 12px; }
+        textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; margin: 10px 0; min-height: 100px; }
+        button { background: #F22F46; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; margin: 10px 0; }
+        button:hover { background: #d41e33; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .result { padding: 15px; margin: 10px 0; border-radius: 4px; border-left: 4px solid #ccc; }
+        .active { background: #e8f5e9; border-left-color: #4CAF50; }
+        .inactive { background: #ffebee; border-left-color: #f44336; }
+        .error { background: #fff3e0; border-left-color: #ff9800; }
+        .loading { text-align: center; padding: 20px; color: #666; }
+        .hidden { display: none; }
+        .logs { background: #333; color: #fff; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; margin-top: 20px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔍 Validador de Números Telefónicos</h1>
-        <div class="subtitle">Usando Twilio Lookup API - Verifica si un número está activo</div>
+        <h1>🔧 Debug - Twilio Lookup Validator</h1>
         
-        <div class="input-section">
-            <label>Ingresa los números a validar (uno por línea):</label>
+        <div class="debug-info">
+            <strong>Endpoint:</strong> /.netlify/functions/lookup<br>
+            <strong>Max números:</strong> 50 por lote<br>
+            <strong>Nota:</strong> Esta versión incluye logs detallados
+        </div>
+        
+        <div>
+            <label>Ingresa números (uno por línea):</label>
             <textarea id="numbersInput" placeholder="Ejemplo:
-+502 5555-5555
-+1 234 567 8900
-+52 55 1234 5678"></textarea>
-            <div class="count" id="numberCount">0 números listos</div>
++50254475090
++15005550001">+50254475090</textarea>
+            <div id="numberCount">1 número listo</div>
         </div>
         
         <button id="validateBtn" onclick="validateNumbers()">Validar Números</button>
+        <button onclick="testWithCurl()" style="background: #4CAF50;">Probar con Curl</button>
         
-        <div class="note">
-            ⓘ Twilio Lookup hace un ping al operador para verificar si el número existe y está activo. 
-            No se envía ningún SMS. Máximo 50 números por lote.
+        <div id="loading" class="loading hidden">
+            <div id="progress">Validando...</div>
         </div>
         
-        <div class="results" id="resultsContainer">
+        <div id="resultsContainer">
             <div id="resultsList"></div>
-            <div id="loading" class="loading hidden">
-                Validando números... <div id="progress">0%</div>
-            </div>
-            <div id="summary" class="summary hidden">
-                <span>Total: <strong id="totalCount">0</strong></span>
-                <span>Activos: <strong id="activeCount">0</strong></span>
-                <span>Inactivos: <strong id="inactiveCount">0</strong></span>
-                <span>Errores: <strong id="errorCount">0</strong></span>
-            </div>
+        </div>
+        
+        <div class="logs" id="debugLogs">
+            <strong>Debug Logs:</strong><br>
+            <div id="logContent">Esperando acción...</div>
         </div>
     </div>
 
     <script>
         // Configuración
         const CONFIG = {
-            maxNumbers: 50,
             apiEndpoint: '/.netlify/functions/lookup'
         };
 
         // Estado
         let isProcessing = false;
-        let results = [];
 
-        // Contador de números en tiempo real
-        document.getElementById('numbersInput').addEventListener('input', function() {
-            const numbers = parseNumbers(this.value);
-            const count = numbers.length;
-            const countElement = document.getElementById('numberCount');
-            
-            countElement.textContent = `${count} números listos`;
-            
-            if (count > CONFIG.maxNumbers) {
-                countElement.style.color = '#f44336';
-                countElement.textContent += ` (Máximo: ${CONFIG.maxNumbers})`;
-            } else {
-                countElement.style.color = '#666';
-            }
-        });
-
-        // Función para parsear números
-        function parseNumbers(input) {
-            return input.split('\n')
-                .map(num => num.trim())
-                .filter(num => num.length > 0)
-                .map(num => {
-                    // Limpiar formato: eliminar espacios, guiones, paréntesis
-                    return num.replace(/\s+/g, '')
-                              .replace(/[()\-]/g, '');
-                })
-                .slice(0, CONFIG.maxNumbers);
+        // Función para agregar logs
+        function addLog(message) {
+            const logs = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML = `[${timestamp}] ${message}<br>` + logs.innerHTML;
+            console.log(message);
         }
 
         // Función principal de validación
@@ -235,246 +83,115 @@
             }
             
             const input = document.getElementById('numbersInput').value;
-            let numbers = parseNumbers(input);
+            const numbers = input.split('\n')
+                .map(num => num.trim())
+                .filter(num => num.length > 0)
+                .map(num => num.replace(/\s+/g, ''));
             
             if (numbers.length === 0) {
-                alert('Por favor ingresa al menos un número telefónico');
+                alert('Por favor ingresa al menos un número');
                 return;
             }
             
-            if (numbers.length > CONFIG.maxNumbers) {
-                alert(`Máximo ${CONFIG.maxNumbers} números por lote`);
-                return;
-            }
+            addLog(`Iniciando validación de ${numbers.length} número(s)...`);
             
-            // Verificar formato de números
-            numbers = numbers.map(num => {
-                // Asegurar formato internacional
-                if (!num.startsWith('+')) {
-                    // Si empieza con 502, añadir +
-                    if (num.startsWith('502')) {
-                        return '+' + num;
-                    }
-                    // Si es un número local guatemalteco (8 dígitos)
-                    if (num.length === 8 && !isNaN(num)) {
-                        return '+502' + num;
-                    }
-                }
-                return num;
-            });
-            
-            console.log('Números a validar (formateados):', numbers);
-            
-            // Iniciar proceso
             isProcessing = true;
-            results = [];
-            
             const btn = document.getElementById('validateBtn');
             btn.disabled = true;
             btn.textContent = 'Validando...';
             
-            // Mostrar loading
-            const loading = document.getElementById('loading');
-            const resultsList = document.getElementById('resultsList');
-            loading.classList.remove('hidden');
-            resultsList.innerHTML = '';
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('resultsList').innerHTML = '';
             
-            // Ocultar resumen anterior
-            document.getElementById('summary').classList.add('hidden');
-            
-            console.log(`Iniciando validación de ${numbers.length} números...`);
-            
-            // Procesar cada número
             for (let i = 0; i < numbers.length; i++) {
                 const number = numbers[i];
                 
-                // Actualizar progreso
-                const progress = Math.round(((i + 1) / numbers.length) * 100);
-                document.getElementById('progress').textContent = `${progress}% (${i + 1}/${numbers.length})`;
+                // Mostrar progreso
+                document.getElementById('progress').textContent = 
+                    `Validando ${i + 1}/${numbers.length}: ${number}`;
                 
-                // Mostrar en la lista como procesando
-                showResultItem(number, 'processing', 'Validando...');
+                // Mostrar en resultados
+                showResult(number, 'processing', 'Consultando Twilio API...');
                 
                 try {
-                    // Llamar a la función de Netlify
-                    const result = await lookupNumber(number);
+                    addLog(`Enviando solicitud para: ${number}`);
                     
-                    console.log(`Resultado para ${number}:`, result);
-                    
-                    // Actualizar resultado
-                    updateResultItem(i, number, result);
-                    
-                    // Guardar en resultados
-                    results.push({
-                        number: number,
-                        status: result.status,
-                        carrier: result.carrier,
-                        country: result.country,
-                        error: result.error,
-                        message: result.message,
-                        timestamp: new Date().toISOString()
+                    const startTime = Date.now();
+                    const response = await fetch(CONFIG.apiEndpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ number: number })
                     });
+                    
+                    const endTime = Date.now();
+                    addLog(`Respuesta recibida en ${endTime - startTime}ms`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const result = await response.json();
+                    addLog(`Resultado: ${JSON.stringify(result).substring(0, 200)}...`);
+                    
+                    // Mostrar resultado
+                    if (result.success) {
+                        showResult(number, result.status, result.message);
+                    } else {
+                        showResult(number, 'error', 
+                            `ERROR: ${result.error || 'Error desconocido'}<br>
+                             Details: ${result.details || 'Sin detalles'}<br>
+                             Code: ${result.code || 'N/A'}`);
+                    }
                     
                 } catch (error) {
-                    console.error(`Error con ${number}:`, error);
-                    
-                    updateResultItem(i, number, {
-                        status: 'error',
-                        error: error.message || 'Error de conexión',
-                        message: 'Error en la solicitud'
-                    });
-                    
-                    results.push({
-                        number: number,
-                        status: 'error',
-                        error: error.message,
-                        message: 'Error de conexión',
-                        timestamp: new Date().toISOString()
-                    });
+                    addLog(`❌ Error: ${error.message}`);
+                    showResult(number, 'error', `Error de conexión: ${error.message}`);
                 }
                 
-                // Pequeña pausa entre requests (para no exceder rate limits)
+                // Esperar entre requests
                 if (i < numbers.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // 1 segundo entre requests
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             }
             
-            // Finalizar proceso
+            // Finalizar
             isProcessing = false;
             btn.disabled = false;
             btn.textContent = 'Validar Números';
-            loading.classList.add('hidden');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('progress').textContent = 'Completado!';
             
-            // Mostrar resumen
-            showSummary();
-            
-            console.log('Validación completada:', results);
+            addLog('✅ Validación completada');
         }
 
-        // Función para mostrar ítem de resultado
-        function showResultItem(number, status, message) {
+        // Función para mostrar resultados
+        function showResult(number, status, message) {
             const resultsList = document.getElementById('resultsList');
-            const item = document.createElement('div');
-            item.className = `result-item ${status}`;
-            item.id = `result-${resultsList.children.length}`;
-            item.innerHTML = `
-                <div class="number">${number}</div>
-                <div class="status">${message}</div>
+            const div = document.createElement('div');
+            div.className = `result ${status}`;
+            div.innerHTML = `
+                <strong>${number}</strong><br>
+                ${message}
             `;
-            resultsList.appendChild(item);
+            resultsList.appendChild(div);
         }
 
-        // Función para actualizar ítem de resultado
-        function updateResultItem(index, number, data) {
-            const item = document.getElementById(`result-${index}`);
-            if (!item) return;
+        // Función para probar con curl (solo informativa)
+        function testWithCurl() {
+            const number = document.getElementById('numbersInput').value.split('\n')[0].trim();
+            const curlCommand = `curl -X POST https://YOUR_SITE.netlify.app/.netlify/functions/lookup \\
+  -H "Content-Type: application/json" \\
+  -d '{"number": "${number}"}'`;
             
-            let statusClass = 'error';
-            let statusText = data.message || 'Error desconocido';
+            addLog('📋 Comando curl de prueba:');
+            addLog(curlCommand);
             
-            if (data.success === true) {
-                if (data.status === 'active') {
-                    statusClass = 'active';
-                    statusText = `${data.message} | Operador: ${data.carrier || 'Desconocido'} | País: ${data.country || 'N/A'}`;
-                } else if (data.status === 'inactive') {
-                    statusClass = 'inactive';
-                    statusText = `❌ INACTIVO | ${data.message || 'El número no existe o está apagado'}`;
-                } else if (data.status === 'invalid') {
-                    statusClass = 'error';
-                    statusText = `❌ INVÁLIDO | ${data.message || 'Formato incorrecto'}`;
-                } else if (data.status === 'unknown') {
-                    statusClass = 'error';
-                    statusText = `⚠️ DESCONOCIDO | ${data.message || 'No se pudo determinar el estado'}`;
-                }
-            } else {
-                statusClass = 'error';
-                statusText = `⚠️ ERROR: ${data.error || data.details || 'Error en la validación'}`;
-                
-                // Mensajes más amigables para errores comunes
-                if (data.code === 20003) {
-                    statusText = '🔐 ERROR: Credenciales de Twilio incorrectas. Verifica las variables de entorno en Netlify.';
-                } else if (data.code === 20001) {
-                    statusText = '💰 ERROR: Cuenta Twilio sin saldo o desactivada. Agrega fondos a tu cuenta.';
-                } else if (data.code === 21211) {
-                    statusText = '📞 ERROR: Formato de número incorrecto. Usa: +502XXXXXXXX';
-                } else if (data.status === 'rate_limited') {
-                    statusText = '⏰ ERROR: Demasiadas solicitudes. Espera unos minutos.';
-                }
-            }
-            
-            item.className = `result-item ${statusClass}`;
-            item.innerHTML = `
-                <div class="number">${number}</div>
-                <div class="status">${statusText}</div>
-            `;
+            // Mostrar en alerta también
+            alert('Comando curl copiado a los logs. Úsalo en terminal para probar directamente.');
         }
 
-        // Función para mostrar resumen
-        function showSummary() {
-            const active = results.filter(r => r.status === 'active').length;
-            const inactive = results.filter(r => r.status === 'inactive').length;
-            const invalid = results.filter(r => r.status === 'invalid').length;
-            const errors = results.filter(r => r.status === 'error' || r.status === 'unknown').length;
-            const total = results.length;
-            
-            document.getElementById('totalCount').textContent = total;
-            document.getElementById('activeCount').textContent = active;
-            document.getElementById('inactiveCount').textContent = inactive + invalid;
-            document.getElementById('errorCount').textContent = errors;
-            
-            document.getElementById('summary').classList.remove('hidden');
-        }
-
-        // Función para llamar a Lookup API
-        async function lookupNumber(phoneNumber) {
-            try {
-                console.log(`Consultando Lookup API para: ${phoneNumber}`);
-                
-                const response = await fetch(CONFIG.apiEndpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        number: phoneNumber
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`Error HTTP: ${response.status}`);
-                }
-                
-                const result = await response.json();
-                
-                // Si hay error en la respuesta, lanzar excepción
-                if (!result.success) {
-                    throw new Error(result.error || result.details || 'Error en la validación');
-                }
-                
-                return result;
-                
-            } catch (error) {
-                console.error('Error en lookupNumber:', error);
-                return {
-                    success: false,
-                    status: 'error',
-                    error: error.message,
-                    details: error.toString()
-                };
-            }
-        }
-
-        // Manejo de Enter en el textarea
-        document.getElementById('numbersInput').addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.key === 'Enter') {
-                validateNumbers();
-            }
-        });
-        
-        // Añadir clase hidden al CSS si no existe
-        const style = document.createElement('style');
-        style.textContent = '.hidden { display: none !important; }';
-        document.head.appendChild(style);
+        // Inicializar
+        addLog('✅ Aplicación lista. Ingresa números y haz click en Validar.');
     </script>
 </body>
 </html>
