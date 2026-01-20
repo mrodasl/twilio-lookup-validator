@@ -1,0 +1,20 @@
+{
+  "name": "twilio-lookup-validator",
+  "version": "1.0.0",
+  "description": "Aplicación simple para validar números telefónicos con Twilio Lookup",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'No build required for static site'"
+  },
+  "dependencies": {
+    "twilio": "^4.0.0"
+  },
+  "keywords": [
+    "twilio",
+    "lookup",
+    "phone-validation",
+    "guatemala"
+  ],
+  "author": "OIM Guatemala",
+  "license": "MIT"
+}
