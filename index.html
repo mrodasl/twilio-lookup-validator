@@ -165,17 +165,39 @@
         }
 
         // Función para mostrar resultados
-        function showResult(number, status, message) {
-            const resultsList = document.getElementById('resultsList');
-            const div = document.createElement('div');
-            div.className = `result ${status}`;
-            div.innerHTML = `
-                <strong>${number}</strong><br>
-                ${message}
-            `;
-            resultsList.appendChild(div);
+        // Función para mostrar resultados (VERSIÓN CORREGIDA)
+function showResult(number, status, message) {
+    const resultsList = document.getElementById('resultsList');
+    
+    // Buscar si ya existe un resultado para este número
+    let existingResult = null;
+    const allResults = resultsList.querySelectorAll('.result');
+    
+    for (const resultDiv of allResults) {
+        if (resultDiv.textContent.includes(number)) {
+            existingResult = resultDiv;
+            break;
         }
-
+    }
+    
+    if (existingResult) {
+        // Actualizar el resultado existente
+        existingResult.className = `result ${status}`;
+        existingResult.innerHTML = `
+            <strong>${number}</strong><br>
+            ${message}
+        `;
+    } else {
+        // Crear nuevo resultado
+        const div = document.createElement('div');
+        div.className = `result ${status}`;
+        div.innerHTML = `
+            <strong>${number}</strong><br>
+            ${message}
+        `;
+        resultsList.appendChild(div);
+    }
+}
         // Función para probar con curl (solo informativa)
         function testWithCurl() {
             const number = document.getElementById('numbersInput').value.split('\n')[0].trim();
