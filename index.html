@@ -15,12 +15,21 @@
         button:hover { background: #d41e33; }
         button:disabled { background: #ccc; cursor: not-allowed; }
         .result { padding: 15px; margin: 10px 0; border-radius: 4px; border-left: 4px solid #ccc; }
+        .processing { background: #e3f2fd; border-left-color: #2196F3; }
         .active { background: #e8f5e9; border-left-color: #4CAF50; }
         .inactive { background: #ffebee; border-left-color: #f44336; }
         .error { background: #fff3e0; border-left-color: #ff9800; }
         .loading { text-align: center; padding: 20px; color: #666; }
         .hidden { display: none; }
         .logs { background: #333; color: #fff; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; margin-top: 20px; }
+        .stats { background: #e8eaf6; padding: 10px; border-radius: 4px; margin: 15px 0; text-align: center; font-weight: bold; }
+        #numberCount { font-size: 12px; color: #666; margin-bottom: 10px; }
+        .button-group { display: flex; gap: 10px; margin: 10px 0; }
+        .button-group button { flex: 1; }
+        .secondary-btn { background: #666 !important; }
+        .secondary-btn:hover { background: #555 !important; }
+        .success-btn { background: #4CAF50 !important; }
+        .success-btn:hover { background: #45a049 !important; }
     </style>
 </head>
 <body>
@@ -41,14 +50,19 @@
             <div id="numberCount">1 número listo</div>
         </div>
         
-        <button id="validateBtn" onclick="validateNumbers()">Validar Números</button>
-        <button onclick="testWithCurl()" style="background: #4CAF50;">Probar con Curl</button>
+        <div class="button-group">
+            <button id="validateBtn" onclick="validateNumbers()">Validar Números</button>
+            <button onclick="testWithCurl()" class="success-btn">Probar con Curl</button>
+        </div>
+        
+        <button onclick="clearResults()" class="secondary-btn">Limpiar Resultados</button>
         
         <div id="loading" class="loading hidden">
             <div id="progress">Validando...</div>
         </div>
         
         <div id="resultsContainer">
+            <div id="statsContainer" class="stats hidden"></div>
             <div id="resultsList"></div>
         </div>
         
@@ -61,11 +75,14 @@
     <script>
         // Configuración
         const CONFIG = {
-            apiEndpoint: '/.netlify/functions/lookup'
+            apiEndpoint: '/.netlify/functions/lookup',
+            delayBetweenRequests: 1000 // 1 segundo entre requests
         };
 
         // Estado
         let isProcessing = false;
+        let totalNumbers = 0;
+        let processedCount = 0;
 
         // Función para agregar logs
         function addLog(message) {
@@ -73,6 +90,79 @@
             const timestamp = new Date().toLocaleTimeString();
             logs.innerHTML = `[${timestamp}] ${message}<br>` + logs.innerHTML;
             console.log(message);
+        }
+
+        // Actualizar contador de números
+        function updateNumberCount() {
+            const input = document.getElementById('numbersInput').value;
+            const numbers = input.split('\n')
+                .map(num => num.trim())
+                .filter(num => num.length > 0)
+                .map(num => num.replace(/\s+/g, ''));
+            
+            const count = numbers.length;
+            document.getElementById('numberCount').textContent = 
+                `${count} número${count !== 1 ? 's' : ''} listo${count !== 1 ? 's' : ''}`;
+        }
+
+        // Función para mostrar resultados (VERSIÓN CORREGIDA)
+        function showResult(number, status, message) {
+            const resultsList = document.getElementById('resultsList');
+            
+            // Buscar si ya existe un resultado para este número
+            let existingResult = null;
+            const allResults = resultsList.querySelectorAll('.result');
+            
+            for (const resultDiv of allResults) {
+                if (resultDiv.textContent.includes(number)) {
+                    existingResult = resultDiv;
+                    break;
+                }
+            }
+            
+            if (existingResult) {
+                // Actualizar el resultado existente
+                existingResult.className = `result ${status}`;
+                existingResult.innerHTML = `
+                    <strong>${number}</strong><br>
+                    ${message}
+                `;
+            } else {
+                // Crear nuevo resultado
+                const div = document.createElement('div');
+                div.className = `result ${status}`;
+                div.innerHTML = `
+                    <strong>${number}</strong><br>
+                    ${message}
+                `;
+                resultsList.appendChild(div);
+            }
+            
+            // Actualizar estadísticas
+            updateStats();
+        }
+
+        // Actualizar estadísticas
+        function updateStats() {
+            const statsContainer = document.getElementById('statsContainer');
+            const activeCount = document.querySelectorAll('.result.active').length;
+            const inactiveCount = document.querySelectorAll('.result.inactive').length;
+            const errorCount = document.querySelectorAll('.result.error').length;
+            const processingCount = document.querySelectorAll('.result.processing').length;
+            const total = activeCount + inactiveCount + errorCount;
+            
+            if (total > 0 || processingCount > 0) {
+                statsContainer.classList.remove('hidden');
+                statsContainer.innerHTML = `
+                    📊 Estadísticas: 
+                    ${activeCount} ✅ activo${activeCount !== 1 ? 's' : ''} | 
+                    ${inactiveCount} ❌ inactivo${inactiveCount !== 1 ? 's' : ''} | 
+                    ${errorCount} ⚠️ error${errorCount !== 1 ? 'es' : ''}
+                    ${processingCount > 0 ? ` | ${processingCount} 🔄 procesando` : ''}
+                `;
+            } else {
+                statsContainer.classList.add('hidden');
+            }
         }
 
         // Función principal de validación
@@ -96,6 +186,9 @@
             addLog(`Iniciando validación de ${numbers.length} número(s)...`);
             
             isProcessing = true;
+            processedCount = 0;
+            totalNumbers = numbers.length;
+            
             const btn = document.getElementById('validateBtn');
             btn.disabled = true;
             btn.textContent = 'Validando...';
@@ -105,12 +198,14 @@
             
             for (let i = 0; i < numbers.length; i++) {
                 const number = numbers[i];
+                processedCount++;
                 
                 // Mostrar progreso
-                document.getElementById('progress').textContent = 
-                    `Validando ${i + 1}/${numbers.length}: ${number}`;
+                document.getElementById('progress').innerHTML = 
+                    `<strong>Progreso:</strong> ${i + 1}/${numbers.length}<br>
+                     <small>${number}</small>`;
                 
-                // Mostrar en resultados
+                // Mostrar en resultados como procesando
                 showResult(number, 'processing', 'Consultando Twilio API...');
                 
                 try {
@@ -148,9 +243,9 @@
                     showResult(number, 'error', `Error de conexión: ${error.message}`);
                 }
                 
-                // Esperar entre requests
+                // Esperar entre requests (excepto el último)
                 if (i < numbers.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, CONFIG.delayBetweenRequests));
                 }
             }
             
@@ -162,45 +257,35 @@
             document.getElementById('progress').textContent = 'Completado!';
             
             addLog('✅ Validación completada');
+            
+            // Mostrar estadísticas finales
+            const activeCount = document.querySelectorAll('.result.active').length;
+            const inactiveCount = document.querySelectorAll('.result.inactive').length;
+            const errorCount = document.querySelectorAll('.result.error').length;
+            
+            addLog(`📊 Estadísticas finales: ${activeCount} activos, ${inactiveCount} inactivos, ${errorCount} errores`);
         }
 
-        // Función para mostrar resultados
-        // Función para mostrar resultados (VERSIÓN CORREGIDA)
-function showResult(number, status, message) {
-    const resultsList = document.getElementById('resultsList');
-    
-    // Buscar si ya existe un resultado para este número
-    let existingResult = null;
-    const allResults = resultsList.querySelectorAll('.result');
-    
-    for (const resultDiv of allResults) {
-        if (resultDiv.textContent.includes(number)) {
-            existingResult = resultDiv;
-            break;
+        // Función para limpiar resultados
+        function clearResults() {
+            document.getElementById('resultsList').innerHTML = '';
+            document.getElementById('statsContainer').classList.add('hidden');
+            addLog('🧹 Resultados limpiados');
         }
-    }
-    
-    if (existingResult) {
-        // Actualizar el resultado existente
-        existingResult.className = `result ${status}`;
-        existingResult.innerHTML = `
-            <strong>${number}</strong><br>
-            ${message}
-        `;
-    } else {
-        // Crear nuevo resultado
-        const div = document.createElement('div');
-        div.className = `result ${status}`;
-        div.innerHTML = `
-            <strong>${number}</strong><br>
-            ${message}
-        `;
-        resultsList.appendChild(div);
-    }
-}
+
         // Función para probar con curl (solo informativa)
         function testWithCurl() {
-            const number = document.getElementById('numbersInput').value.split('\n')[0].trim();
+            const input = document.getElementById('numbersInput').value;
+            const numbers = input.split('\n')
+                .map(num => num.trim())
+                .filter(num => num.length > 0);
+            
+            if (numbers.length === 0) {
+                alert('Ingresa al menos un número para generar el comando curl');
+                return;
+            }
+            
+            const number = numbers[0];
             const curlCommand = `curl -X POST https://YOUR_SITE.netlify.app/.netlify/functions/lookup \\
   -H "Content-Type: application/json" \\
   -d '{"number": "${number}"}'`;
@@ -213,6 +298,8 @@ function showResult(number, status, message) {
         }
 
         // Inicializar
+        document.getElementById('numbersInput').addEventListener('input', updateNumberCount);
+        updateNumberCount();
         addLog('✅ Aplicación lista. Ingresa números y haz click en Validar.');
     </script>
 </body>
