@@ -50,7 +50,8 @@ exports.handler = async function(event, context) {
                 headers,
                 body: JSON.stringify({
                     success: false,
-                    error: 'Twilio credentials not configured in environment variables'
+                    error: 'Twilio credentials not configured in environment variables',
+                    details: 'Please add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN to Netlify environment variables'
                 })
             };
         }
@@ -67,7 +68,8 @@ exports.handler = async function(event, context) {
                 headers,
                 body: JSON.stringify({
                     success: false,
-                    error: 'Invalid JSON format in request body'
+                    error: 'Invalid JSON format in request body',
+                    details: parseError.message
                 })
             };
         }
@@ -81,7 +83,8 @@ exports.handler = async function(event, context) {
                 headers,
                 body: JSON.stringify({
                     success: false,
-                    error: 'Número telefónico requerido'
+                    error: 'Número telefónico requerido',
+                    details: 'El campo "number" es obligatorio en el cuerpo de la solicitud'
                 })
             };
         }
@@ -95,33 +98,40 @@ exports.handler = async function(event, context) {
         const cleanNumber = number.replace(/\s+/g, '');
         console.log(`🔧 Cleaned number: ${cleanNumber}`);
 
-        // DEBUG: Probar diferentes enfoques
-        console.log('🔄 Attempting Twilio Lookup...');
-        
+        // ENFOQUE 1: Lookup V1 (carrier)
         try {
-            // ENFOQUE 1: Método más simple (Lookup V1)
-            console.log('📡 Trying Lookup V1 style...');
+            console.log('📡 Trying Lookup V1 (carrier)...');
             const result = await client.lookups
                 .phoneNumbers(cleanNumber)
-                .fetch({ type: 'carrier' });
+                .fetch({ type: ['carrier'] });
             
             console.log('✅ Lookup V1 Success!');
             console.log('Result:', {
                 phoneNumber: result.phoneNumber,
                 nationalFormat: result.nationalFormat,
                 carrier: result.carrier,
-                countryCode: result.countryCode
+                countryCode: result.countryCode,
+                carrierErrorCode: result.carrierErrorCode
             });
 
-            // Determinar estado
+            // Determinar estado basado en carrier
             let status = 'unknown';
             let message = 'Estado desconocido';
+            let valid = true;
             
-            if (result.carrier) {
+            if (result.carrier && result.carrier.name) {
                 status = 'active';
-                message = `✅ ACTIVO - ${result.carrier.name || 'Operador desconocido'}`;
+                message = `✅ ACTIVO - Operador: ${result.carrier.name}`;
+                if (result.carrier.type) {
+                    message += ` (${result.carrier.type})`;
+                }
+            } else if (result.carrierErrorCode) {
+                status = 'inactive';
+                valid = false;
+                message = `❌ INACTIVO - Error código: ${result.carrierErrorCode}`;
             } else {
                 status = 'inactive';
+                valid = false;
                 message = '❌ INACTIVO - No se encontró información del operador';
             }
 
@@ -132,44 +142,59 @@ exports.handler = async function(event, context) {
                     success: true,
                     status: status,
                     number: result.phoneNumber,
-                    valid: true,
+                    valid: valid,
                     message: message,
                     carrier: result.carrier?.name || 'Desconocido',
-                    country: result.countryCode || 'N/A',
                     carrierType: result.carrier?.type || 'unknown',
-                    timestamp: new Date().toISOString(),
-                    method: 'lookup_v1'
+                    country: result.countryCode || 'N/A',
+                    carrierErrorCode: result.carrierErrorCode || null,
+                    method: 'lookup_v1_carrier',
+                    timestamp: new Date().toISOString()
                 })
             };
 
         } catch (v1Error) {
             console.log('⚠️ Lookup V1 failed:', v1Error.message);
             
-            // ENFOQUE 2: Intentar con Lookup V2
+            // ENFOQUE 2: Lookup V2 (line type intelligence)
             try {
-                console.log('📡 Trying Lookup V2 with minimal fields...');
+                console.log('📡 Trying Lookup V2 (line_type_intelligence)...');
                 const v2Result = await client.lookups.v2.phoneNumbers(cleanNumber)
-                    .fetch({ fields: 'line_type_intelligence' });
+                    .fetch({ 
+                        fields: 'line_type_intelligence,caller_name,sim_swap' 
+                    });
                 
                 console.log('✅ Lookup V2 Success!');
                 console.log('V2 Result:', {
                     phoneNumber: v2Result.phoneNumber,
                     valid: v2Result.valid,
-                    lineType: v2Result.lineTypeIntelligence
+                    lineType: v2Result.lineTypeIntelligence,
+                    callerName: v2Result.callerName
                 });
 
                 let status = 'unknown';
                 let message = 'Estado desconocido';
+                let valid = v2Result.valid !== false;
                 
                 if (v2Result.lineTypeIntelligence) {
                     const lineType = v2Result.lineTypeIntelligence.type;
-                    if (lineType === 'mobile' || lineType === 'landline' || lineType === 'voip') {
+                    const lineTypeName = v2Result.lineTypeIntelligence.type || 'unknown';
+                    
+                    if (lineTypeName === 'mobile' || lineTypeName === 'landline' || lineTypeName === 'voip') {
                         status = 'active';
-                        message = `✅ ACTIVO - Línea ${lineType}`;
-                    } else if (lineType === 'invalid') {
+                        message = `✅ ACTIVO - Tipo: ${lineTypeName}`;
+                    } else if (lineTypeName === 'invalid' || lineTypeName === 'unknown') {
                         status = 'inactive';
-                        message = '❌ INACTIVO - Línea no válida';
+                        message = `❌ INACTIVO - Tipo: ${lineTypeName}`;
+                        valid = false;
+                    } else {
+                        status = lineTypeName === 'fixedLine' ? 'active' : 'unknown';
+                        message = `ℹ️ ${lineTypeName.toUpperCase()} - Tipo: ${lineTypeName}`;
                     }
+                } else {
+                    status = 'inactive';
+                    message = '❌ INACTIVO - No hay información de tipo de línea';
+                    valid = false;
                 }
 
                 return {
@@ -179,17 +204,19 @@ exports.handler = async function(event, context) {
                         success: true,
                         status: status,
                         number: v2Result.phoneNumber,
-                        valid: v2Result.valid,
+                        valid: valid,
                         message: message,
                         lineType: v2Result.lineTypeIntelligence?.type || 'unknown',
+                        lineTypeName: v2Result.lineTypeIntelligence?.type_name || 'unknown',
+                        callerName: v2Result.callerName?.caller_name || 'N/A',
                         country: v2Result.countryCode || 'N/A',
-                        timestamp: new Date().toISOString(),
-                        method: 'lookup_v2_minimal'
+                        method: 'lookup_v2_line_type',
+                        timestamp: new Date().toISOString()
                     })
                 };
 
             } catch (v2Error) {
-                console.error('❌ Both Lookup methods failed');
+                console.error('❌ Lookup V2 also failed');
                 console.error('V2 Error details:', {
                     code: v2Error.code,
                     status: v2Error.status,
@@ -197,61 +224,37 @@ exports.handler = async function(event, context) {
                     moreInfo: v2Error.moreInfo
                 });
 
-                // ENFOQUE 3: Intentar con Verify API como fallback
-                try {
-                    console.log('🔄 Trying Verify API as fallback...');
-                    const verifyResult = await client.verify.v2.services
-                        .create({ friendlyName: 'Lookup Test' });
-                    
-                    console.log('Verify service created:', verifyResult.sid);
-                    
-                    // Intentar verificar el número
-                    const verification = await client.verify.v2.services(verifyResult.sid)
-                        .verifications
-                        .create({ to: cleanNumber, channel: 'sms' });
-                    
-                    console.log('Verification started:', verification.status);
-                    
-                    // Limpiar servicio de verify
-                    await client.verify.v2.services(verifyResult.sid).remove();
-                    
-                    return {
-                        statusCode: 200,
-                        headers,
-                        body: JSON.stringify({
-                            success: true,
-                            status: 'active',
-                            number: cleanNumber,
-                            valid: true,
-                            message: '✅ ACTIVO - Número acepta verificación SMS',
-                            method: 'verify_api_fallback',
-                            verificationStatus: verification.status,
-                            timestamp: new Date().toISOString()
-                        })
-                    };
-
-                } catch (verifyError) {
-                    console.error('❌ Verify API also failed:', verifyError.message);
-                    
-                    // Error final con todos los detalles
-                    return {
-                        statusCode: 200,
-                        headers,
-                        body: JSON.stringify({
-                            success: false,
-                            status: 'error',
-                            error: 'Todas las APIs de Twilio fallaron',
-                            details: {
-                                v1Error: v1Error.message,
-                                v2Error: v2Error.message,
-                                verifyError: verifyError.message,
-                                v1Code: v1Error.code,
-                                v2Code: v2Error.code
-                            },
-                            timestamp: new Date().toISOString()
-                        })
-                    };
+                // Analizar el error para dar mejor información
+                let errorMessage = v2Error.message;
+                let errorCode = v2Error.code;
+                let userMessage = 'Error en la validación';
+                
+                // Mensajes más amigables para errores comunes
+                if (errorCode === 20404) {
+                    userMessage = 'Número no encontrado en Twilio';
+                } else if (errorCode === 20003) {
+                    userMessage = 'Error de autenticación de Twilio';
+                } else if (errorCode === 60605) {
+                    userMessage = 'Número no válido para el país';
                 }
+
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({
+                        success: false,
+                        status: 'error',
+                        error: userMessage,
+                        details: errorMessage,
+                        code: errorCode,
+                        method: 'lookup_failed',
+                        timestamp: new Date().toISOString(),
+                        debug: {
+                            v1Error: v1Error.message,
+                            v2Error: v2Error.message
+                        }
+                    })
+                };
             }
         }
 
@@ -267,7 +270,7 @@ exports.handler = async function(event, context) {
                 status: 'error',
                 error: 'Error interno del servidor',
                 details: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+                code: error.code || 'UNKNOWN',
                 timestamp: new Date().toISOString()
             })
         };
