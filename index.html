@@ -191,7 +191,7 @@
         // Configuración
         const CONFIG = {
             maxNumbers: 50,
-            apiEndpoint: '/.netlify/functions/lookup' // Para Netlify Functions
+            apiEndpoint: '/.netlify/functions/lookup'
         };
 
         // Estado
@@ -219,6 +219,11 @@
             return input.split('\n')
                 .map(num => num.trim())
                 .filter(num => num.length > 0)
+                .map(num => {
+                    // Limpiar formato: eliminar espacios, guiones, paréntesis
+                    return num.replace(/\s+/g, '')
+                              .replace(/[()\-]/g, '');
+                })
                 .slice(0, CONFIG.maxNumbers);
         }
 
@@ -230,7 +235,7 @@
             }
             
             const input = document.getElementById('numbersInput').value;
-            const numbers = parseNumbers(input);
+            let numbers = parseNumbers(input);
             
             if (numbers.length === 0) {
                 alert('Por favor ingresa al menos un número telefónico');
@@ -241,6 +246,24 @@
                 alert(`Máximo ${CONFIG.maxNumbers} números por lote`);
                 return;
             }
+            
+            // Verificar formato de números
+            numbers = numbers.map(num => {
+                // Asegurar formato internacional
+                if (!num.startsWith('+')) {
+                    // Si empieza con 502, añadir +
+                    if (num.startsWith('502')) {
+                        return '+' + num;
+                    }
+                    // Si es un número local guatemalteco (8 dígitos)
+                    if (num.length === 8 && !isNaN(num)) {
+                        return '+502' + num;
+                    }
+                }
+                return num;
+            });
+            
+            console.log('Números a validar (formateados):', numbers);
             
             // Iniciar proceso
             isProcessing = true;
@@ -288,6 +311,7 @@
                         carrier: result.carrier,
                         country: result.country,
                         error: result.error,
+                        message: result.message,
                         timestamp: new Date().toISOString()
                     });
                     
@@ -296,20 +320,22 @@
                     
                     updateResultItem(i, number, {
                         status: 'error',
-                        error: error.message || 'Error de conexión'
+                        error: error.message || 'Error de conexión',
+                        message: 'Error en la solicitud'
                     });
                     
                     results.push({
                         number: number,
                         status: 'error',
                         error: error.message,
+                        message: 'Error de conexión',
                         timestamp: new Date().toISOString()
                     });
                 }
                 
-                // Pequeña pausa entre requests
+                // Pequeña pausa entre requests (para no exceder rate limits)
                 if (i < numbers.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 300));
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // 1 segundo entre requests
                 }
             }
             
@@ -326,68 +352,54 @@
         }
 
         // Función para mostrar ítem de resultado
-        function updateResultItem(index, number, data) {
-    const item = document.getElementById(`result-${index}`);
-    
-    let statusClass = 'error';
-    let statusText = 'Error desconocido';
-    
-    if (data.success === false) {
-        // Error de la API
-        statusClass = 'error';
-        statusText = `⚠️ ERROR: ${data.error || 'Error en la validación'}`;
-        if (data.details) {
-            statusText += `<br><small>${data.details}</small>`;
+        function showResultItem(number, status, message) {
+            const resultsList = document.getElementById('resultsList');
+            const item = document.createElement('div');
+            item.className = `result-item ${status}`;
+            item.id = `result-${resultsList.children.length}`;
+            item.innerHTML = `
+                <div class="number">${number}</div>
+                <div class="status">${message}</div>
+            `;
+            resultsList.appendChild(item);
         }
-    } else if (data.status === 'active') {
-        statusClass = 'active';
-        const carrierInfo = data.carrier && data.carrier !== 'Desconocido' 
-            ? ` | Operador: ${data.carrier}` 
-            : '';
-        const countryInfo = data.country && data.country !== 'N/A'
-            ? ` | País: ${data.country}`
-            : '';
-        statusText = `✅ ACTIVO ${carrierInfo}${countryInfo}`;
-    } else if (data.status === 'inactive') {
-        statusClass = 'inactive';
-        statusText = `❌ INACTIVO | El número no existe o está apagado`;
-    } else if (data.status === 'invalid') {
-        statusClass = 'error';
-        statusText = `❌ INVÁLIDO | Formato incorrecto o número no válido`;
-    } else if (data.status === 'unsupported') {
-        statusClass = 'error';
-        statusText = `⚠️ NO SOPORTADO | País no disponible para validación`;
-    } else {
-        statusClass = 'error';
-        statusText = `⚠️ ESTADO DESCONOCIDO | ${JSON.stringify(data)}`;
-    }
-    
-    item.className = `result-item ${statusClass}`;
-    item.innerHTML = `
-        <div class="number">${number}</div>
-        <div class="status">${statusText}</div>
-    `;
-}
 
         // Función para actualizar ítem de resultado
         function updateResultItem(index, number, data) {
             const item = document.getElementById(`result-${index}`);
+            if (!item) return;
             
             let statusClass = 'error';
-            let statusText = 'Error desconocido';
+            let statusText = data.message || 'Error desconocido';
             
-            if (data.status === 'active') {
-                statusClass = 'active';
-                statusText = `✅ ACTIVO | Operador: ${data.carrier || 'Desconocido'} | País: ${data.country || 'N/A'}`;
-            } else if (data.status === 'inactive') {
-                statusClass = 'inactive';
-                statusText = `❌ INACTIVO | El número no existe o está apagado`;
-            } else if (data.status === 'error') {
+            if (data.success === true) {
+                if (data.status === 'active') {
+                    statusClass = 'active';
+                    statusText = `${data.message} | Operador: ${data.carrier || 'Desconocido'} | País: ${data.country || 'N/A'}`;
+                } else if (data.status === 'inactive') {
+                    statusClass = 'inactive';
+                    statusText = `❌ INACTIVO | ${data.message || 'El número no existe o está apagado'}`;
+                } else if (data.status === 'invalid') {
+                    statusClass = 'error';
+                    statusText = `❌ INVÁLIDO | ${data.message || 'Formato incorrecto'}`;
+                } else if (data.status === 'unknown') {
+                    statusClass = 'error';
+                    statusText = `⚠️ DESCONOCIDO | ${data.message || 'No se pudo determinar el estado'}`;
+                }
+            } else {
                 statusClass = 'error';
-                statusText = `⚠️ ERROR: ${data.error || 'Error en la validación'}`;
-            } else if (data.status === 'invalid') {
-                statusClass = 'error';
-                statusText = `❌ INVÁLIDO | Formato incorrecto`;
+                statusText = `⚠️ ERROR: ${data.error || data.details || 'Error en la validación'}`;
+                
+                // Mensajes más amigables para errores comunes
+                if (data.code === 20003) {
+                    statusText = '🔐 ERROR: Credenciales de Twilio incorrectas. Verifica las variables de entorno en Netlify.';
+                } else if (data.code === 20001) {
+                    statusText = '💰 ERROR: Cuenta Twilio sin saldo o desactivada. Agrega fondos a tu cuenta.';
+                } else if (data.code === 21211) {
+                    statusText = '📞 ERROR: Formato de número incorrecto. Usa: +502XXXXXXXX';
+                } else if (data.status === 'rate_limited') {
+                    statusText = '⏰ ERROR: Demasiadas solicitudes. Espera unos minutos.';
+                }
             }
             
             item.className = `result-item ${statusClass}`;
@@ -401,12 +413,13 @@
         function showSummary() {
             const active = results.filter(r => r.status === 'active').length;
             const inactive = results.filter(r => r.status === 'inactive').length;
-            const errors = results.filter(r => r.status === 'error' || r.status === 'invalid').length;
+            const invalid = results.filter(r => r.status === 'invalid').length;
+            const errors = results.filter(r => r.status === 'error' || r.status === 'unknown').length;
             const total = results.length;
             
             document.getElementById('totalCount').textContent = total;
             document.getElementById('activeCount').textContent = active;
-            document.getElementById('inactiveCount').textContent = inactive;
+            document.getElementById('inactiveCount').textContent = inactive + invalid;
             document.getElementById('errorCount').textContent = errors;
             
             document.getElementById('summary').classList.remove('hidden');
@@ -431,13 +444,22 @@
                     throw new Error(`Error HTTP: ${response.status}`);
                 }
                 
-                return await response.json();
+                const result = await response.json();
+                
+                // Si hay error en la respuesta, lanzar excepción
+                if (!result.success) {
+                    throw new Error(result.error || result.details || 'Error en la validación');
+                }
+                
+                return result;
                 
             } catch (error) {
                 console.error('Error en lookupNumber:', error);
                 return {
+                    success: false,
                     status: 'error',
-                    error: error.message
+                    error: error.message,
+                    details: error.toString()
                 };
             }
         }
@@ -448,6 +470,11 @@
                 validateNumbers();
             }
         });
+        
+        // Añadir clase hidden al CSS si no existe
+        const style = document.createElement('style');
+        style.textContent = '.hidden { display: none !important; }';
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
